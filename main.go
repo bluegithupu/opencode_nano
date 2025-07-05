@@ -16,7 +16,23 @@ import (
 )
 
 func main() {
+	// 检查是否有 --auto 参数
+	autoMode := false
+	args := os.Args[1:]
+	for i, arg := range args {
+		if arg == "--auto" || arg == "-a" {
+			autoMode = true
+			// 从参数列表中移除 --auto
+			args = append(args[:i], args[i+1:]...)
+			break
+		}
+	}
+
 	fmt.Println("🤖 OpenCode Nano - Interactive AI Programming Assistant")
+	if autoMode {
+		fmt.Println("⚡ 自动模式已启用 - 所有操作将自动批准")
+		fmt.Println("⚠️  警告: 请确保您信任正在执行的任务")
+	}
 	fmt.Println("Type 'exit' or 'quit' to exit, Ctrl+C to interrupt")
 	fmt.Println(strings.Repeat("=", 50))
 
@@ -28,7 +44,12 @@ func main() {
 	}
 
 	// 创建权限管理器
-	perm := permission.New()
+	var perm permission.Manager
+	if autoMode {
+		perm = permission.NewAuto()
+	} else {
+		perm = permission.New()
+	}
 
 	// 创建工具集
 	toolSet := []tools.Tool{
@@ -56,8 +77,8 @@ func main() {
 	}()
 
 	// 如果有命令行参数，执行单次对话模式
-	if len(os.Args) > 1 {
-		prompt := strings.Join(os.Args[1:], " ")
+	if len(args) > 0 {
+		prompt := strings.Join(args, " ")
 		err := ag.RunOnce(ctx, prompt)
 		if err != nil {
 			fmt.Printf("Error: %v\n", err)
@@ -109,22 +130,29 @@ func main() {
 
 func printHelp() {
 	fmt.Println(`
-📖 Available commands:
-  • Just type your request to chat with the AI
-  • 'clear' - Clear conversation history
-  • 'help' - Show this help message  
-  • 'exit' or 'quit' - Exit the program
-  • Ctrl+C - Interrupt current operation
+📖 可用命令:
+  • 直接输入您的请求与 AI 对话
+  • 'clear' - 清除对话历史
+  • 'help' - 显示此帮助信息  
+  • 'exit' 或 'quit' - 退出程序
+  • Ctrl+C - 中断当前操作
 
-🔧 Available tools:
-  • read_file - Read file contents
-  • write_file - Write to files (requires permission)
-  • bash - Execute shell commands (requires permission)
+🔧 可用工具:
+  • read_file - 读取文件内容
+  • write_file - 写入文件（需要权限）
+  • bash - 执行 shell 命令（需要权限）
 
-💡 Example prompts:
-  • "Create a hello world Go program"
-  • "Read the contents of README.md"
-  • "List files in the current directory"
-  • "Help me debug this code"
+⚡ 启动参数:
+  • --auto 或 -a - 自动模式，批准所有操作（谨慎使用）
+
+💡 示例提示:
+  • "创建一个 Go 的 hello world 程序"
+  • "读取 README.md 的内容"
+  • "列出当前目录的文件"
+  • "帮我调试这段代码"
+
+🚀 自主模式使用示例:
+  • ./opencode_nano --auto "重构这个项目的错误处理"
+  • ./opencode_nano -a "添加单元测试并确保通过"
 `)
 }

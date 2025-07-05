@@ -8,10 +8,10 @@ import (
 )
 
 type WriteTool struct {
-	perm *permission.Manager
+	perm permission.Manager
 }
 
-func NewWriteTool(perm *permission.Manager) *WriteTool {
+func NewWriteTool(perm permission.Manager) *WriteTool {
 	return &WriteTool{perm: perm}
 }
 

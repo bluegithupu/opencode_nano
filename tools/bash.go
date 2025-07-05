@@ -9,10 +9,10 @@ import (
 )
 
 type BashTool struct {
-	perm *permission.Manager
+	perm permission.Manager
 }
 
-func NewBashTool(perm *permission.Manager) *BashTool {
+func NewBashTool(perm permission.Manager) *BashTool {
 	return &BashTool{perm: perm}
 }
 
