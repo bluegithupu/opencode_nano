@@ -39,6 +39,7 @@ OpenCode Nano is a simplified AI programming assistant that demonstrates core AI
 - **ReadTool**: Read file contents (no permission required)
 - **WriteTool**: Write file contents (requires user permission)
 - **BashTool**: Execute bash commands with safety checks (requires user permission)
+- **TodoTool**: Manage session todo lists for task planning and tracking (no permission required)
 
 ## Security Features
 
@@ -74,11 +75,18 @@ export OPENAI_BASE_URL="https://api.rcouyi.com/v1"  # Optional custom endpoint
 3. Consider if the tool requires permission checks
 4. Use `ToOpenAIFunction()` to convert to OpenAI function definition
 
+### Session Management
+- **Todo Lists**: Use the `todo` tool to manage task lists for complex multi-step operations
+- **Persistent Storage**: Todo lists are persisted across sessions in `~/.opencode_nano/session_todos.json`
+- **Operations**: Support add, update, delete, list, clear, and count operations
+- **Priority Levels**: high, medium, low priority support
+- **Status Tracking**: pending, in_progress, completed status management
+
 ### Key Differences from Full OpenCode
 - No TUI interface (command-line only)
-- No persistent storage or session management
+- Basic session management (todo lists only)
 - Single AI provider (OpenAI only)
-- Minimal tool set (3 core tools vs 10+ in full version)
+- Minimal tool set (4 core tools vs 10+ in full version)
 - Environment variable configuration only
 - No LSP or MCP integration
 
@@ -90,3 +98,29 @@ export OPENAI_BASE_URL="https://api.rcouyi.com/v1"  # Optional custom endpoint
 - Streaming response errors are handled gracefully
 
 This is a learning-focused implementation that demonstrates AI agent fundamentals without the complexity of the full OpenCode system.
+
+## Todo Tool Usage Examples
+
+The todo tool helps manage complex multi-step tasks:
+
+```bash
+# Add a new todo
+./opencode_nano "添加一个高优先级的 todo：实现用户认证功能"
+
+# View todo list
+./opencode_nano "显示我的 todo 列表"
+
+# Update todo status
+./opencode_nano "将 ID 为 123 的 todo 标记为进行中"
+
+# Delete a todo
+./opencode_nano "删除 ID 为 123 的 todo"
+
+# Clear all todos
+./opencode_nano "清空所有 todo"
+
+# Get statistics
+./opencode_nano "显示 todo 统计信息"
+```
+
+The AI will automatically use the todo tool when handling complex tasks that require multiple steps.

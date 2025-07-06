@@ -52,10 +52,21 @@ func main() {
 	}
 
 	// 创建工具集
+	todoTool, err := tools.NewTodoTool()
+	if err != nil {
+		fmt.Printf("Warning: Failed to create todo tool: %v\n", err)
+		// 不影响程序运行，继续
+	}
+	
 	toolSet := []tools.Tool{
 		tools.NewReadTool(),
 		tools.NewWriteTool(perm),
 		tools.NewBashTool(perm),
+	}
+	
+	// 添加 todo 工具（如果成功创建）
+	if todoTool != nil {
+		toolSet = append(toolSet, todoTool)
 	}
 
 	// 创建代理
@@ -141,15 +152,18 @@ func printHelp() {
   • read_file - 读取文件内容
   • write_file - 写入文件（需要权限）
   • bash - 执行 shell 命令（需要权限）
+  • todo - 管理会话 todo 列表（无需权限）
 
 ⚡ 启动参数:
   • --auto 或 -a - 自动模式，批准所有操作（谨慎使用）
 
 💡 示例提示:
   • "创建一个 Go 的 hello world 程序"
-  • "读取 README.md 的内容"
+  • "读取 README.md 的内容"  
   • "列出当前目录的文件"
   • "帮我调试这段代码"
+  • "添加一个 todo：实现用户认证功能"
+  • "查看我的 todo 列表"
 
 🚀 自主模式使用示例:
   • ./opencode_nano --auto "重构这个项目的错误处理"
