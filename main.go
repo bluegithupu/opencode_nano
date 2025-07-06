@@ -52,16 +52,10 @@ func main() {
 	}
 
 	// 创建工具集 - 使用新的工具系统
-	toolSet, err := tools.CreateLegacyToolSet(perm)
+	toolSet, err := tools.CreateToolSet(perm)
 	if err != nil {
 		fmt.Printf("Error creating tool set: %v\n", err)
-		// 回退到旧的工具系统（不包含 todo）
-		toolSet = []tools.Tool{
-			tools.NewReadTool(),
-			tools.NewWriteTool(perm),
-			tools.NewBashTool(perm),
-		}
-		fmt.Printf("Warning: Using basic tool set without task management\n")
+		os.Exit(1)
 	}
 
 	// 创建代理

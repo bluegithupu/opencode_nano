@@ -11,7 +11,8 @@
       "Bash(grep:*)",
       "Bash(go run:*)",
       "Bash(mv:*)",
-      "Bash(git add:*)"
+      "Bash(git add:*)",
+      "Bash(git commit:*)"
     ],
     "deny": []
   }
