@@ -6,12 +6,26 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ### Building and Running
 - `go build -o opencode_nano` - Build the main binary
-- `./opencode_nano "your prompt here"` - Run the application with a prompt
-- `go run main.go "your prompt here"` - Run without building binary
+- `./opencode_nano` - Run in interactive mode
+- `./opencode_nano "your prompt here"` - Run with a single command
+- `./opencode_nano --auto "prompt"` or `./opencode_nano -a "prompt"` - Run in auto mode (auto-approves all operations)
+- `go run main.go` - Run without building binary
 
 ### Testing
 - `go test ./...` - Run all tests
 - `go test -v ./...` - Run tests with verbose output
+- `go test ./tools/...` - Run tests for specific package
+- `make test` - Run tests using Makefile
+- `make test-coverage` - Generate coverage report
+- `make test-coverage-html` - Generate HTML coverage report
+- `make test-race` - Run tests with race detection
+- `make bench` - Run benchmark tests
+
+### Development Utilities
+- `make fmt` - Format code
+- `make lint` - Run linter (requires golangci-lint)
+- `make check` - Run fmt, test, and lint
+- `make clean` - Clean build artifacts and test cache
 
 ### Requirements
 - Go 1.21 or higher
@@ -20,107 +34,145 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Architecture Overview
 
-OpenCode Nano is a simplified AI programming assistant that demonstrates core AI agent concepts. It focuses on understanding the fundamental working principles of AI agent systems.
+OpenCode Nano is a simplified AI programming assistant that demonstrates core AI agent concepts. The codebase is undergoing a major refactoring to introduce a modular tool system.
 
 ### Core Components
-- **main.go**: Entry point that coordinates config, permissions, tools, and agent
+
+**Entry Points:**
+- **main.go**: Entry point supporting interactive mode, single command mode, and auto mode
 - **config/**: Configuration management (loads OpenAI API key from environment)
 - **agent/**: Core AI agent logic with OpenAI integration and streaming responses
-- **tools/**: Tool system with unified interface for AI capabilities
+  - `RunOnce()`: Execute single task with multi-round conversation support
+  - `RunInteractive()`: Continuous conversation mode
+  - `StreamResponseWithTools()`: Multi-round tool execution
+
+**Tool System (Dual Architecture):**
+- **tools/** (Legacy): Original simple tool interface
+- **tools/core/** (New): Modular, interface-based tool system
+  - Type-safe parameters and results
+  - Tool registry with categories and tags
+  - Pipeline support for tool composition
+  - Comprehensive error handling
+
+**Permission System:**
 - **permission/**: Interactive permission system for dangerous operations
+- Supports interactive mode and auto-approval mode
+- Integrated with both old and new tool systems
+
+**Session Management:**
+- **session/**: Todo list management with persistent storage
+- Stores todos in `~/.opencode_nano/session_todos.json`
+
+### New Tool System Architecture
+
+The new modular tool system provides significant improvements:
+
+**Core Interfaces** (`tools/core/interfaces.go`):
+```go
+type Tool interface {
+    Info() ToolInfo
+    Execute(ctx context.Context, params Parameters) (Result, error)
+    Schema() ParameterSchema
+}
+```
+
+**Tool Registry** (`tools/core/registry.go`):
+- Register tools with aliases
+- Search by name, category, or tags
+- Thread-safe operations
+- Tool discovery and categorization
+
+**Tool Categories:**
+- **file/**: Read, Write, Edit, Search, Glob, List operations
+- **system/**: Bash (enhanced), Pipeline, Env, Process management
+- **task/**: Todo/task management with import/export
+
+**Migration Layer** (`tools/migration.go`):
+- `CreateLegacyToolSet()`: Creates backward-compatible tool set
+- `PermissionWrappedTool`: Integrates permission checks
+- Ensures smooth transition from old to new system
 
 ### Key Design Patterns
-- **Tool Interface**: Unified interface for all AI capabilities with `Name()`, `Description()`, `Parameters()`, and `Execute()` methods
-- **Permission System**: Interactive approval for dangerous operations (file writes, bash commands)
-- **Streaming Response**: Real-time display of AI responses using OpenAI streaming API
-- **Single Conversation**: Stateless operation with no persistent session storage
+
+**Multi-Round Conversation:**
+- Agent can complete multi-step tasks autonomously
+- Configurable maximum rounds (10 for RunOnce, 5 for RunInteractive)
+- Continues execution as long as tools are called
+
+**Tool Execution Flow:**
+1. Agent analyzes user request
+2. Selects appropriate tool(s)
+3. Checks permissions if required
+4. Executes tool with parameters
+5. Processes results and continues if needed
+
+**Error Handling:**
+- Typed errors with codes and context
+- Retryable error support
+- Rich error information for debugging
 
 ### Available Tools
-- **ReadTool**: Read file contents (no permission required)
-- **WriteTool**: Write file contents (requires user permission)
-- **BashTool**: Execute bash commands with safety checks (requires user permission)
-- **TodoTool**: Manage session todo lists for task planning and tracking (no permission required)
 
-## Security Features
+**File Operations:**
+- **read**: Read file contents with line ranges
+- **write**: Write files with atomic operations
+- **edit**: Find/replace with regex support
+- **search**: Content search with regex
+- **glob**: File pattern matching
+- **list**: Directory listing
 
-### Permission System
-- All file write operations require explicit user approval
-- All bash command execution requires explicit user approval
-- Interactive permission prompts with action description
-- User must type 'y' or 'yes' to approve dangerous operations
+**System Operations:**
+- **bash**: Execute commands with safety checks
+- **pipeline**: Sequential/parallel command execution
+- **env**: Environment variable management
+- **process**: Process management
 
-### Command Safety
-- Built-in dangerous command filtering (blocks `rm -rf`, `sudo`, `curl`, `wget`, etc.)
-- Commands are executed through controlled `bash -c` wrapper
-- Error handling with combined output capture
+**Development Tools:**
+- **todo**: Todo/task management with priorities and statuses (formerly task tool)
 
-## Configuration
+### Security Features
 
-The application uses environment variables for configuration:
-- `OPENAI_API_KEY`: Required OpenAI API key for GPT model access
-- `OPENAI_BASE_URL`: Optional custom base URL for OpenAI API (defaults to https://api.openai.com/v1)
-- No config files or persistent storage
+**Permission System:**
+- Interactive approval for dangerous operations
+- Auto mode for CI/CD scenarios
+- Tool-specific permission requirements
 
-### Example Configuration
+**Command Safety:**
+- Dangerous command filtering
+- Timeout support
+- Environment isolation
+- Working directory control
+
+### Configuration
+
+Environment variables only:
+- `OPENAI_API_KEY`: Required for OpenAI API access
+- `OPENAI_BASE_URL`: Optional custom API endpoint
+
+No configuration files - designed for simplicity.
+
+### Development Notes
+
+**Adding New Tools:**
+1. Implement `core.Tool` interface in appropriate category
+2. Register in `tools/registry.go`
+3. Add permission wrapper if needed
+4. Tool automatically available to agent
+
+**Testing New Tools:**
 ```bash
-export OPENAI_API_KEY="your-api-key-here"
-export OPENAI_BASE_URL="https://api.rcouyi.com/v1"  # Optional custom endpoint
+# Run specific tool tests
+go test -v ./tools/file/...
+
+# Test with coverage
+go test -coverprofile=coverage.out ./tools/...
 ```
 
-## Development Notes
+**Tool Development Best Practices:**
+- Use `core.BaseTool` for common functionality
+- Implement proper parameter validation
+- Return structured `Result` with metadata
+- Handle context cancellation
+- Add comprehensive error messages
 
-### Adding New Tools
-1. Implement the `Tool` interface in `tools/` package
-2. Add tool to toolSet in `main.go`
-3. Consider if the tool requires permission checks
-4. Use `ToOpenAIFunction()` to convert to OpenAI function definition
-
-### Session Management
-- **Todo Lists**: Use the `todo` tool to manage task lists for complex multi-step operations
-- **Persistent Storage**: Todo lists are persisted across sessions in `~/.opencode_nano/session_todos.json`
-- **Operations**: Support add, update, delete, list, clear, and count operations
-- **Priority Levels**: high, medium, low priority support
-- **Status Tracking**: pending, in_progress, completed status management
-
-### Key Differences from Full OpenCode
-- No TUI interface (command-line only)
-- Basic session management (todo lists only)
-- Single AI provider (OpenAI only)
-- Minimal tool set (4 core tools vs 10+ in full version)
-- Environment variable configuration only
-- No LSP or MCP integration
-
-## Error Handling
-
-- Configuration errors exit with descriptive messages
-- Tool execution errors are returned to the AI for handling
-- Permission denials are treated as tool execution failures
-- Streaming response errors are handled gracefully
-
-This is a learning-focused implementation that demonstrates AI agent fundamentals without the complexity of the full OpenCode system.
-
-## Todo Tool Usage Examples
-
-The todo tool helps manage complex multi-step tasks:
-
-```bash
-# Add a new todo
-./opencode_nano "添加一个高优先级的 todo：实现用户认证功能"
-
-# View todo list
-./opencode_nano "显示我的 todo 列表"
-
-# Update todo status
-./opencode_nano "将 ID 为 123 的 todo 标记为进行中"
-
-# Delete a todo
-./opencode_nano "删除 ID 为 123 的 todo"
-
-# Clear all todos
-./opencode_nano "清空所有 todo"
-
-# Get statistics
-./opencode_nano "显示 todo 统计信息"
-```
-
-The AI will automatically use the todo tool when handling complex tasks that require multiple steps.
+This is a learning-focused implementation that demonstrates AI agent fundamentals while introducing professional software engineering patterns.

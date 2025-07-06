@@ -151,20 +151,27 @@ func TestTodoManager_List(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Add() failed: %v", err)
 	}
+	t.Logf("Added item2: ID=%s, Content=%s", item2.ID, item2.Content)
 
-	_, err = manager.Add("Low priority", PriorityLow)
+	item3, err := manager.Add("Low priority", PriorityLow)
 	if err != nil {
 		t.Fatalf("Add() failed: %v", err)
 	}
+	t.Logf("Added item3: ID=%s, Content=%s", item3.ID, item3.Content)
 
 	// 更新一个 todo 的状态
 	_, err = manager.Update(item2.ID, StatusInProgress, "", TodoPriority(""))
 	if err != nil {
 		t.Fatalf("Update() failed: %v", err)
 	}
+	t.Logf("Updated item2 to in_progress")
 
 	// 测试列表排序
 	items := manager.List()
+	t.Logf("Number of items: %d", len(items))
+	for i, item := range items {
+		t.Logf("Item %d: ID=%s, Status=%s, Priority=%s, Content=%s", i, item.ID, item.Status, item.Priority, item.Content)
+	}
 	if len(items) != 3 {
 		t.Fatalf("List() returned %d items, want 3", len(items))
 	}
@@ -221,12 +228,38 @@ func TestTodoManager_Count(t *testing.T) {
 	}
 
 	// 添加不同状态的 todo
-	_, _ = manager.Add("Todo 1", PriorityMedium)
-	item2, _ := manager.Add("Todo 2", PriorityMedium)
-	item3, _ := manager.Add("Todo 3", PriorityMedium)
+	item1, err := manager.Add("Todo 1", PriorityMedium)
+	if err != nil {
+		t.Fatalf("Add item1 failed: %v", err)
+	}
+	t.Logf("Added item1: %s", item1.ID)
+	
+	item2, err := manager.Add("Todo 2", PriorityMedium)
+	if err != nil {
+		t.Fatalf("Add item2 failed: %v", err)
+	}
+	t.Logf("Added item2: %s", item2.ID)
+	
+	item3, err := manager.Add("Todo 3", PriorityMedium)
+	if err != nil {
+		t.Fatalf("Add item3 failed: %v", err)
+	}
+	t.Logf("Added item3: %s", item3.ID)
 
-	manager.Update(item2.ID, StatusInProgress, "", TodoPriority(""))
-	manager.Update(item3.ID, StatusCompleted, "", TodoPriority(""))
+	_, err = manager.Update(item2.ID, StatusInProgress, "", TodoPriority(""))
+	if err != nil {
+		t.Fatalf("Update item2 failed: %v", err)
+	}
+	_, err = manager.Update(item3.ID, StatusCompleted, "", TodoPriority(""))
+	if err != nil {
+		t.Fatalf("Update item3 failed: %v", err)
+	}
+	
+	// Debug: Print all items
+	items := manager.List()
+	for _, item := range items {
+		t.Logf("Item %s: Status=%s", item.ID, item.Status)
+	}
 
 	// 验证计数
 	counts = manager.Count()

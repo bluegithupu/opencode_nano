@@ -51,22 +51,17 @@ func main() {
 		perm = permission.New()
 	}
 
-	// 创建工具集
-	todoTool, err := tools.NewTodoTool()
+	// 创建工具集 - 使用新的工具系统
+	toolSet, err := tools.CreateLegacyToolSet(perm)
 	if err != nil {
-		fmt.Printf("Warning: Failed to create todo tool: %v\n", err)
-		// 不影响程序运行，继续
-	}
-	
-	toolSet := []tools.Tool{
-		tools.NewReadTool(),
-		tools.NewWriteTool(perm),
-		tools.NewBashTool(perm),
-	}
-	
-	// 添加 todo 工具（如果成功创建）
-	if todoTool != nil {
-		toolSet = append(toolSet, todoTool)
+		fmt.Printf("Error creating tool set: %v\n", err)
+		// 回退到旧的工具系统（不包含 todo）
+		toolSet = []tools.Tool{
+			tools.NewReadTool(),
+			tools.NewWriteTool(perm),
+			tools.NewBashTool(perm),
+		}
+		fmt.Printf("Warning: Using basic tool set without task management\n")
 	}
 
 	// 创建代理

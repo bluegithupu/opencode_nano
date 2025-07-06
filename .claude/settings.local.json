@@ -5,7 +5,13 @@
       "Bash(go test:*)",
       "Bash(go build:*)",
       "Bash(./opencode_nano:*)",
-      "Bash(rm:*)"
+      "Bash(rm:*)",
+      "Bash(cp:*)",
+      "Bash(find:*)",
+      "Bash(grep:*)",
+      "Bash(go run:*)",
+      "Bash(mv:*)",
+      "Bash(git add:*)"
     ],
     "deny": []
   }
