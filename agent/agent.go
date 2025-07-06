@@ -18,17 +18,24 @@ type Agent struct {
 
 const systemPrompt = `你是 OpenCode Nano，一个乐于助人的 AI 编程助手。你可以通过读取和写入文件以及在必要时执行 bash 命令来帮助用户完成编程任务。
 
-你是一个智能体 - 请继续工作直到用户的查询完全解决，然后再结束你的回合并交还给用户。只有当你确定问题已解决时才终止你的回合。如果你对与用户请求相关的文件内容或代码库结构不确定，请使用你的工具来读取文件并收集相关信息：不要猜测或编造答案。
+**重要：你是一个自主工作的智能体**
+- 你应该持续工作直到用户的任务完全解决
+- 当你使用工具后，会立即收到工具执行的结果
+- 基于工具执行结果，你应该继续分析并执行下一步操作
+- 不要在执行一个工具后就停止，而应该根据结果继续工作
+- 只有当任务真正完成时，才结束工作
 
 请通过编辑和测试当前代码执行会话中的代码文件来解决用户的任务。你是一个已部署的编程智能体。你的会话允许你修改和运行代码。仓库已经克隆到你的工作目录中，你必须完全解决问题才能被认为是正确的答案。
 
-重要：为了提高效率和减少用户交互：
-- 在开始任务前，先制定完整的执行计划
-- 尽可能批量处理相关操作，减少往返确认
-- 优先使用读取操作了解项目结构，再进行修改
-- 将相关的文件操作组合在一起执行
-- 遇到错误时，自主分析并尝试解决，而不是立即询问用户
-- 完成任务后，主动验证结果的正确性
+**工作流程示例：**
+1. 用户："创建一个简单的 web 服务器"
+2. 你应该：
+   - 使用 todo 工具规划任务步骤
+   - 读取项目结构了解现状
+   - 创建必要的代码文件
+   - 运行测试验证功能
+   - 更新 todo 状态标记完成
+   - 报告任务完成
 
 **多步任务管理：**
 - 当遇到需要多步完成的复杂任务时，请使用 todo 工具来规划和跟踪进度
@@ -47,9 +54,13 @@ const systemPrompt = `你是 OpenCode Nano，一个乐于助人的 AI 编程助�
 2. 规划阶段：对于复杂任务，使用 todo 工具创建任务列表；制定详细的修改计划
 3. 执行阶段：按计划执行，遇到问题自主调整，及时更新 todo 状态
 4. 验证阶段：通过测试命令验证修改是否正确
-5. 总结阶段：简要报告完成的工作，清理已完成的 todo
+5. 总结阶段：简要报告完成的工作，确认任务已完成
 
-记住：尽量减少询问用户，通过仔细分析和规划来自主完成任务。对于复杂的多步任务，主动使用 todo 工具进行任务管理。
+记住：
+- 你会自动接收工具执行结果，应基于结果继续工作
+- 不要在执行一个操作后就停下来等待
+- 持续工作直到任务完全解决
+- 主动使用 todo 工具进行任务管理
 
 当前工作目录：%s`
 
@@ -73,7 +84,7 @@ func New(cfg *config.Config, toolSet []tools.Tool) (*Agent, error) {
 	}, nil
 }
 
-// RunOnce 执行单次对话（用于命令行参数模式）
+// RunOnce 执行单次对话（用于命令行参数模式）- 支持多轮自主对话
 func (a *Agent) RunOnce(ctx context.Context, prompt string) error {
 	fmt.Printf("🤖 OpenCode Nano is thinking...\n\n")
 	
@@ -85,28 +96,72 @@ func (a *Agent) RunOnce(ctx context.Context, prompt string) error {
 	
 	messages := append(a.conversation, userMsg)
 	
-	// 流式响应处理
-	err := a.provider.StreamResponse(
-		ctx,
-		messages,
-		func(delta string) {
-			fmt.Print(delta)
-		},
-		func(toolCall openai.ToolCall) (string, error) {
-			fmt.Printf("\n🔧 Executing tool: %s\n", toolCall.Function.Name)
-			return "", nil
-		},
-	)
+	// 最大轮次限制，防止无限循环
+	maxRounds := 10
 	
-	if err != nil {
-		return fmt.Errorf("failed to get response: %v", err)
+	for round := 0; round < maxRounds; round++ {
+		var assistantResponse string
+		var toolCalls []openai.ToolCall
+		hasToolCalls := false
+		
+		// 流式响应处理
+		err := a.provider.StreamResponseWithTools(
+			ctx,
+			messages,
+			func(delta string) {
+				fmt.Print(delta)
+				assistantResponse += delta
+			},
+			func(toolCall openai.ToolCall) {
+				toolCalls = append(toolCalls, toolCall)
+				hasToolCalls = true
+			},
+		)
+		
+		if err != nil {
+			return fmt.Errorf("failed to get response: %v", err)
+		}
+		
+		// 添加助手响应到消息历史
+		messages = append(messages, openai.ChatCompletionMessage{
+			Role:    openai.ChatMessageRoleAssistant,
+			Content: assistantResponse,
+		})
+		
+		// 如果没有工具调用，说明任务完成
+		if !hasToolCalls {
+			break
+		}
+		
+		// 执行所有工具调用
+		fmt.Printf("\n")
+		for _, toolCall := range toolCalls {
+			fmt.Printf("🔧 Executing tool: %s\n", toolCall.Function.Name)
+			result, err := a.provider.ExecuteToolCall(toolCall)
+			if err != nil {
+				result = fmt.Sprintf("Error executing tool: %v", err)
+			}
+			
+			// 将工具结果作为用户消息添加到历史
+			toolResultMsg := openai.ChatCompletionMessage{
+				Role:    openai.ChatMessageRoleUser,
+				Content: fmt.Sprintf("Tool [%s] result:\n%s", toolCall.Function.Name, result),
+			}
+			messages = append(messages, toolResultMsg)
+			
+			// 显示工具结果
+			fmt.Printf("📝 Result: %s\n", result)
+		}
+		
+		// 继续下一轮对话
+		fmt.Printf("\n🤖 Assistant: ")
 	}
 	
 	fmt.Printf("\n\n✅ Task completed!\n")
 	return nil
 }
 
-// RunInteractive 执行交互式对话（保持对话历史）
+// RunInteractive 执行交互式对话（保持对话历史）- 支持多轮自主对话
 func (a *Agent) RunInteractive(ctx context.Context, prompt string) error {
 	fmt.Printf("\n🤖 Assistant: ")
 	
@@ -117,46 +172,68 @@ func (a *Agent) RunInteractive(ctx context.Context, prompt string) error {
 	}
 	a.conversation = append(a.conversation, userMsg)
 	
-	// 收集助手的完整响应
-	var assistantResponse string
-	var toolResults []string
+	// 最大轮次限制
+	maxRounds := 5 // 交互模式下轮次少一些
 	
-	// 流式响应处理
-	err := a.provider.StreamResponseWithHistory(
-		ctx,
-		a.conversation,
-		func(delta string) {
-			fmt.Print(delta)
-			assistantResponse += delta
-		},
-		func(toolCall openai.ToolCall, result string) {
-			fmt.Printf("\n🔧 Tool %s executed\n", toolCall.Function.Name)
-			if result != "" {
-				fmt.Printf("📝 Result: %s\n", result)
-				toolResults = append(toolResults, result)
-			}
-			fmt.Print("🤖 Assistant: ")
-		},
-	)
-	
-	if err != nil {
-		return fmt.Errorf("failed to get response: %v", err)
-	}
-	
-	// 添加助手响应到对话历史
-	assistantMsg := openai.ChatCompletionMessage{
-		Role:    openai.ChatMessageRoleAssistant,
-		Content: assistantResponse,
-	}
-	a.conversation = append(a.conversation, assistantMsg)
-	
-	// 如果有工具执行结果，也添加到对话历史
-	for _, result := range toolResults {
-		toolMsg := openai.ChatCompletionMessage{
-			Role:    openai.ChatMessageRoleUser,
-			Content: fmt.Sprintf("Tool execution result: %s", result),
+	for round := 0; round < maxRounds; round++ {
+		var assistantResponse string
+		var toolCalls []openai.ToolCall
+		hasToolCalls := false
+		
+		// 流式响应处理
+		err := a.provider.StreamResponseWithTools(
+			ctx,
+			a.conversation,
+			func(delta string) {
+				fmt.Print(delta)
+				assistantResponse += delta
+			},
+			func(toolCall openai.ToolCall) {
+				toolCalls = append(toolCalls, toolCall)
+				hasToolCalls = true
+			},
+		)
+		
+		if err != nil {
+			return fmt.Errorf("failed to get response: %v", err)
 		}
-		a.conversation = append(a.conversation, toolMsg)
+		
+		// 添加助手响应到对话历史
+		assistantMsg := openai.ChatCompletionMessage{
+			Role:    openai.ChatMessageRoleAssistant,
+			Content: assistantResponse,
+		}
+		a.conversation = append(a.conversation, assistantMsg)
+		
+		// 如果没有工具调用，结束本次交互
+		if !hasToolCalls {
+			break
+		}
+		
+		// 执行所有工具调用
+		fmt.Printf("\n")
+		for _, toolCall := range toolCalls {
+			fmt.Printf("🔧 Executing tool: %s\n", toolCall.Function.Name)
+			result, err := a.provider.ExecuteToolCall(toolCall)
+			if err != nil {
+				result = fmt.Sprintf("Error executing tool: %v", err)
+			}
+			
+			// 将工具结果作为用户消息添加到历史
+			toolResultMsg := openai.ChatCompletionMessage{
+				Role:    openai.ChatMessageRoleUser,
+				Content: fmt.Sprintf("Tool [%s] result:\n%s", toolCall.Function.Name, result),
+			}
+			a.conversation = append(a.conversation, toolResultMsg)
+			
+			// 显示工具结果
+			fmt.Printf("📝 Result: %s\n", result)
+		}
+		
+		// 如果还有轮次，继续对话
+		if round < maxRounds-1 {
+			fmt.Printf("\n🤖 Assistant: ")
+		}
 	}
 	
 	return nil

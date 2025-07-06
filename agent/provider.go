@@ -210,6 +210,95 @@ func (p *Provider) StreamResponseWithHistory(ctx context.Context, messages []ope
 	return nil
 }
 
+// StreamResponseWithTools 支持多轮对话的流式响应（不立即执行工具）
+func (p *Provider) StreamResponseWithTools(ctx context.Context, messages []openai.ChatCompletionMessage, onDelta func(string), onToolCall func(openai.ToolCall)) error {
+	// 准备工具定义
+	var toolDefinitions []openai.Tool
+	for _, tool := range p.tools {
+		toolDef := openai.Tool{
+			Type: openai.ToolTypeFunction,
+			Function: openai.FunctionDefinition{
+				Name:        tool.Name(),
+				Description: tool.Description(),
+				Parameters:  tool.Parameters(),
+			},
+		}
+		toolDefinitions = append(toolDefinitions, toolDef)
+	}
+
+	req := openai.ChatCompletionRequest{
+		Model:    "gpt-4o-mini",
+		Messages: messages,
+		Tools:    toolDefinitions,
+		Stream:   true,
+	}
+
+	stream, err := p.client.CreateChatCompletionStream(ctx, req)
+	if err != nil {
+		return fmt.Errorf("failed to create stream: %v", err)
+	}
+	defer stream.Close()
+
+	var currentToolCall *openai.ToolCall
+
+	for {
+		response, err := stream.Recv()
+		if err != nil {
+			if err.Error() == "EOF" {
+				break
+			}
+			return fmt.Errorf("stream error: %v", err)
+		}
+
+		if len(response.Choices) == 0 {
+			continue
+		}
+
+		delta := response.Choices[0].Delta
+
+		// 处理文本内容
+		if delta.Content != "" {
+			onDelta(delta.Content)
+		}
+
+		// 处理工具调用
+		if len(delta.ToolCalls) > 0 {
+			for _, toolCall := range delta.ToolCalls {
+				if toolCall.ID != "" {
+					// 新的工具调用
+					if currentToolCall != nil {
+						// 通知之前的工具调用
+						onToolCall(*currentToolCall)
+					}
+					currentToolCall = &openai.ToolCall{
+						ID:   toolCall.ID,
+						Type: toolCall.Type,
+						Function: openai.FunctionCall{
+							Name:      toolCall.Function.Name,
+							Arguments: toolCall.Function.Arguments,
+						},
+					}
+				} else if currentToolCall != nil {
+					// 继续构建当前工具调用
+					currentToolCall.Function.Arguments += toolCall.Function.Arguments
+				}
+			}
+		}
+	}
+
+	// 通知最后一个工具调用
+	if currentToolCall != nil {
+		onToolCall(*currentToolCall)
+	}
+
+	return nil
+}
+
+// ExecuteToolCall 执行工具调用（公开方法）
+func (p *Provider) ExecuteToolCall(toolCall openai.ToolCall) (string, error) {
+	return p.executeToolCall(toolCall)
+}
+
 func (p *Provider) executeToolCall(toolCall openai.ToolCall) (string, error) {
 	// 找到对应的工具
 	var targetTool tools.Tool
