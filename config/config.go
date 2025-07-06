@@ -3,6 +3,7 @@ package config
 import (
 	"fmt"
 	"os"
+	"strings"
 )
 
 type Config struct {
@@ -11,12 +12,12 @@ type Config struct {
 }
 
 func Load() (*Config, error) {
-	apiKey := os.Getenv("OPENAI_API_KEY")
+	apiKey := strings.TrimSpace(os.Getenv("OPENAI_API_KEY"))
 	if apiKey == "" {
 		return nil, fmt.Errorf("OPENAI_API_KEY environment variable is required")
 	}
 
-	baseURL := os.Getenv("OPENAI_BASE_URL")
+	baseURL := strings.TrimSpace(os.Getenv("OPENAI_BASE_URL"))
 	// 如果没有设置，使用默认的 OpenAI URL
 	if baseURL == "" {
 		baseURL = "https://api.openai.com/v1"

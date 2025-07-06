@@ -43,7 +43,7 @@ func (p *Provider) StreamResponse(ctx context.Context, messages []openai.ChatCom
 	}
 
 	req := openai.ChatCompletionRequest{
-		Model:    "gpt-4.1-mini",
+		Model:    "claude-opus-4-20250514-coder",
 		Messages: messages,
 		Tools:    toolDefinitions,
 		Stream:   true,

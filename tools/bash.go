@@ -73,6 +73,13 @@ func (t *BashTool) isDangerous(command string) bool {
 		"mkfs",
 		"fdisk",
 		"> /dev/",
+		"ssh ",
+		"scp ",
+		"chmod 777",
+		"chown -r",
+		":()",
+		"mv /*",
+		"find / -delete",
 	}
 
 	cmdLower := strings.ToLower(command)

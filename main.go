@@ -129,7 +129,7 @@ func main() {
 }
 
 func printHelp() {
-	fmt.Println(`
+	fmt.Print(`
 📖 可用命令:
   • 直接输入您的请求与 AI 对话
   • 'clear' - 清除对话历史
